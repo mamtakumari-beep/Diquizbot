@@ -346,33 +346,23 @@ async def handle_options_count(update: Update, context: ContextTypes.DEFAULT_TYP
 
 async def handle_time_limit(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     context.user_data['time_limit'] = int(update.message.text.split()[0])
-    reply_keyboard = [['Shuffle All', 'No Shuffle']]
-    await update.message.reply_text(
-        "🔀 **Step 10 — Shuffle**\nMix questions sequence order?",
-        reply_markup=ReplyKeyboardMarkup(reply_keyboard, one_time_keyboard=True, resize_keyboard=True)
+    
+    # ✅ AI QUESTIONS GENERATE करो
+    topic = context.user_data.get('topic', 'General Knowledge')
+    count = context.user_data.get('q_count', 5)
+    lang = context.user_data.get('language', 'English')
+    difficulty = context.user_data.get('difficulty', 'Medium')
+    options_cnt = context.user_data.get('options_count', 4)
+    
+    # Generating message dikha
+    generating_msg = await update.message.reply_text(
+        "🤖 *AI Quiz Generate Ho Raha Hai...*\n\n"
+        "⏳ Please wait, 10-15 seconds...",
+        parse_mode="Markdown",
+        reply_markup=ReplyKeyboardRemove()
     )
-    return SHUFFLE
-
-async def handle_shuffle(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Handle shuffle selection and generate AI questions"""
+    
     try:
-        context.user_data['shuffle'] = update.message.text
-        
-        # ✅ AI QUESTIONS GENERATE KARO
-        topic = context.user_data.get('topic', 'General Knowledge')
-        count = context.user_data.get('q_count', 5)
-        lang = context.user_data.get('language', 'English')
-        difficulty = context.user_data.get('difficulty', 'Medium')
-        options_cnt = context.user_data.get('options_count', 4)
-        
-        # Generating message dikha
-        generating_msg = await update.message.reply_text(
-            "🤖 *AI Quiz Generate Ho Raha Hai...*\n\n"
-            "⏳ Please wait, 10-15 seconds...",
-            parse_mode="Markdown",
-            reply_markup=ReplyKeyboardRemove()
-        )
-        
         # AI se questions generate karo
         ai_questions = generate_bulk_questions_ai(topic, count, lang, difficulty, options_cnt)
         
@@ -381,7 +371,7 @@ async def handle_shuffle(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                 "❌ AI Questions generate nahi ho paye. Try again!",
                 parse_mode="Markdown"
             )
-            return SHUFFLE
+            return TIME_LIMIT
         
         # ✅ FORMAT QUESTIONS PROPERLY
         formatted_questions = []
@@ -430,10 +420,9 @@ async def handle_shuffle(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         return NEGATIVE
         
     except Exception as e:
-        logging.error(f"Error in handle_shuffle: {e}")
+        logging.error(f"Error in handle_time_limit: {e}")
         await update.message.reply_text("❌ Error generating questions. Try again!")
-        return SHUFFLE
-
+        return TIME_LIMIT
 
 # Final Summary aur Quiz Generation Confirmation
 async def handle_negative_and_finish(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
