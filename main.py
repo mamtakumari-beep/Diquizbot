@@ -209,32 +209,72 @@ def generate_bulk_questions_ai(topic, count, lang, difficulty, options_cnt):
         return mock_questions(topic, count, options_cnt)
     
     prompt = f"""
-    Generate exactly {count} multiple-choice quiz questions about '{topic}' in the '{lang}' language (or script format).
-    Difficulty level should be: {difficulty}.
-    Each question must have exactly {options_cnt} options.
-    Identify the correct option using its 0-based index.
-    
-    You MUST respond ONLY with a valid JSON Array matching this structure:
-    [
-        {{
-            "question": "Sawal Text Here",
-            "options": ["Option 1", "Option 2", ...],
-            "correct": 0
-        }}
-    ]
-    Do not wrap the response in markdown formatting or ```json blocks. Return raw JSON text only.
-    """
+You are an expert quiz creator. Generate exactly {count} multiple-choice quiz questions about '{topic}'.
+
+Requirements:
+- Language: {lang}
+- Difficulty: {difficulty}
+- Each question must have exactly {options_cnt} options
+- Each question must have ONE correct answer
+- Return ONLY valid JSON, nothing else
+
+IMPORTANT: The "correct" field must be the 0-based INDEX of the correct option (0, 1, 2, or 3).
+
+Example response for 2 questions with 4 options each:
+[
+    {{
+        "question": "What is the capital of India?",
+        "options": ["Delhi", "Mumbai", "Bangalore", "Chennai"],
+        "correct": 0
+    }},
+    {{
+        "question": "Who wrote Ramayana?",
+        "options": ["Kalidasa", "Valmiki", "Vyasa", "Tulsidas"],
+        "correct": 1
+    }}
+]
+
+Generate the quiz questions now:
+"""
     try:
         response = ai_client.models.generate_content(
             model='gemini-2.5-flash',
             contents=prompt,
         )
-        clean_text = response.text.strip().replace("```json", "").replace("```", "")
-        return json.loads(clean_text)
-    except Exception as e:
-        logging.error(f"AI Generation Failed: {e}")  # ✅ FIXED: logger → logging
-        return mock_questions(topic, count, options_cnt)
         
+        # Clean response
+        clean_text = response.text.strip()
+        if clean_text.startswith("```json"):
+            clean_text = clean_text[7:]  # Remove ```json
+        if clean_text.startswith("```"):
+            clean_text = clean_text[3:]  # Remove ```
+        if clean_text.endswith("```"):
+            clean_text = clean_text[:-3]  # Remove trailing ```
+        clean_text = clean_text.strip()
+        
+        questions = json.loads(clean_text)
+        
+        # ✅ VALIDATE: सुनिश्चित करो कि "correct" एक index है
+        for q in questions:
+            if not isinstance(q.get("correct"), int):
+                # अगर text है तो index में convert करो
+                correct_text = q.get("correct", "")
+                options = q.get("options", [])
+                if correct_text in options:
+                    q["correct"] = options.index(correct_text)
+                else:
+                    q["correct"] = 0  # Default first option
+        
+        return questions
+        
+    except json.JSONDecodeError as je:
+        logging.error(f"JSON Parse Failed: {je}")
+        logging.error(f"Response was: {response.text}")
+        return mock_questions(topic, count, options_cnt)
+    except Exception as e:
+        logging.error(f"AI Generation Failed: {e}")
+        return mock_questions(topic, count, options_cnt)
+
 def mock_questions(topic, count, options_cnt):
     questions = []
     for i in range(1, count + 1):
