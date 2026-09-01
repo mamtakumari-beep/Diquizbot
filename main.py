@@ -232,9 +232,9 @@ def generate_bulk_questions_ai(topic, count, lang, difficulty, options_cnt):
         clean_text = response.text.strip().replace("```json", "").replace("```", "")
         return json.loads(clean_text)
     except Exception as e:
-        logger.error(f"AI Generation Failed: {e}")
+        logging.error(f"AI Generation Failed: {e}")  # ✅ FIXED: logger → logging
         return mock_questions(topic, count, options_cnt)
-
+        
 def mock_questions(topic, count, options_cnt):
     questions = []
     for i in range(1, count + 1):
