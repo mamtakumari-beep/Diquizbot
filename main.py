@@ -364,77 +364,48 @@ async def handle_shuffle(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
 # Final Summary aur Quiz Generation Confirmation
 async def handle_negative_and_finish(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    context.user_data['negative'] = float(update.message.text)
-    
-    # Saare data ko variables me extract karna
-    data = context.user_data
-    creator_id = update.effective_user.id
-    
-    # Loading message
-    await update.message.reply_text("⏳ **Generating AI Questions... Please wait!**", parse_mode="Markdown")
-    
-    # AI se questions generate karna
-    questions = generate_bulk_questions_ai(
-        topic=data.get('topic'),
-        count=data.get('q_count'),
-        lang=data.get('language'),
-        difficulty=data.get('difficulty'),
-        options_cnt=data.get('options_count')
-    )
-    
-    # Unique Quiz ID generate karna
-    quiz_id = f"quiz_{uuid.uuid4().hex[:12]}"
-    
-    # Database mein quiz save karna
-    conn = sqlite3.connect(DB_NAME)
-    cursor = conn.cursor()
-    cursor.execute("""
-        INSERT INTO quizzes 
-        (quiz_id, creator_id, title, topic, q_count, language, difficulty, options_count, time_limit, shuffle, negative, questions_json)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    """, (
-        quiz_id,
-        creator_id,
-        data.get('title'),
-        data.get('topic'),
-        data.get('q_count'),
-        data.get('language'),
-        data.get('difficulty'),
-        data.get('options_count'),
-        data.get('time_limit'),
-        data.get('shuffle'),
-        data.get('negative'),
-        json.dumps(questions)
-    ))
-    conn.commit()
-    conn.close()
-    
-    # HTML formatting with quiz summary
-    summary = (
-        "<b>🎉 AI Quiz Generated Successfully!</b>\n\n"
-        f"🏷 <b>Title:</b> {data.get('title')}\n"
-        f"📝 <b>Questions:</b> {data.get('q_count')}\n"
-        f"🌐 <b>Language:</b> {data.get('language')}\n"
-        f"🎚 <b>Difficulty:</b> {data.get('difficulty')}\n"
-        f"🎛 <b>Options/Q:</b> {data.get('options_count')}\n"
-        f"🧾 <b>Explanation:</b> {data.get('explanation')}\n"
-        f"⏱ <b>Time/Q:</b> {data.get('time_limit')} sec\n"
-        f"🔀 <b>Shuffle:</b> {data.get('shuffle')}\n"
-        f"➖ <b>Negative:</b> {data.get('negative')}\n\n"
-        "<b>🎮 Ready to Play!</b>"
-    )
-    
-    # Inline buttons for Private Chat and Group Chat
-    keyboard = [
-        [InlineKeyboardButton("🎮 Start Quiz in Private", callback_data=f"start_private_{quiz_id}")],
-        [InlineKeyboardButton("👥 Start Quiz in Group", callback_data=f"start_group_{quiz_id}")],
-        [InlineKeyboardButton("🔗 Share Group Link", callback_data=f"share_link_{quiz_id}")]
-    ]
-    markup = InlineKeyboardMarkup(keyboard)
-    
-    await update.message.reply_text(summary, parse_mode="HTML", reply_markup=markup)
-    
-    return ConversationHandler.END
+    try:
+        query = update.callback_query
+        await query.answer()
+        
+        neg_val = float(query.data.replace("neg_", "").strip())
+        quiz = context.user_data.get("quiz_build", {})
+        user_id = context.user_data.get("quiz_build_creator_id")
+        
+        if not quiz or not quiz.get("title"):
+            await query.message.reply_text("❌ Error: Quiz data missing. Start over with /newquiz")
+            return ConversationHandler.END
+
+        conn = sqlite3.connect(DB_FILE)  # ✅ FIXED: DB_FILE instead of DB_NAME
+        cursor = conn.cursor()
+        # negative_value column ke sath data insert kiya
+        cursor.execute(
+            "INSERT INTO quizzes (creator_id, title, description, timer, negative_value) VALUES (?, ?, ?, ?, ?)", 
+            (user_id, quiz["title"], quiz["description"], quiz["timer"], neg_val)
+        )
+        qid = cursor.lastrowid
+        
+        for q in quiz["questions"]:
+            cursor.execute(
+                "INSERT INTO questions (quiz_id, question_text, options, correct_answer, explanation, pre_message) VALUES (?, ?, ?, ?, ?, ?)", 
+                (qid, q["text"], json.dumps(q["options"]), q["correct"], q["explanation"], q["pre_message"])
+            )
+        conn.commit()
+        conn.close()
+        
+        context.user_data.pop("quiz_build", None)
+        context.user_data.pop("quiz_build_creator_id", None)
+        
+        await query.message.edit_reply_markup(reply_markup=None)
+        
+        neg_display = "Disabled" if neg_val == 0.0 else f"-{neg_val} per wrong answer"
+        await query.message.reply_text(f"✅ Quiz Created Successfully!\n⏱ Timer: {quiz['timer']}s\n📉 Negative Marking: {neg_display}")
+        
+        await show_summary_panel_text(query, context, qid)
+        return ConversationHandler.END
+    except Exception as e:
+        logging.error(f"Error in handle_negative_selection: {e}")
+        return ConversationHandler.END
 
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     await update.message.reply_text("❌ Quiz setup processing setup abandoned.", reply_markup=ReplyKeyboardRemove())
