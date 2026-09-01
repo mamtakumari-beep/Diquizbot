@@ -354,13 +354,73 @@ async def handle_time_limit(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     return SHUFFLE
 
 async def handle_shuffle(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    context.user_data['shuffle'] = update.message.text
-    reply_keyboard = [['0', '0.25', '0.33', '0.50']]
-    await update.message.reply_text(
-        "➖ **Step 11 — Negative Marking**\nDeduct offset per error choice:",
-        reply_markup=ReplyKeyboardMarkup(reply_keyboard, one_time_keyboard=True, resize_keyboard=True)
-    )
-    return NEGATIVE
+    """Handle shuffle selection and generate AI questions"""
+    try:
+        context.user_data['shuffle'] = update.message.text
+        
+        # ✅ GENERATE AI QUESTIONS HERE (before negative marking)
+        topic = context.user_data.get('topic', 'General Knowledge')
+        count = context.user_data.get('q_count', 5)
+        lang = context.user_data.get('language', 'English')
+        difficulty = context.user_data.get('difficulty', 'Medium')
+        options_cnt = context.user_data.get('options_count', 4)
+        
+        # Show generating message
+        generating_msg = await update.message.reply_text(
+            "🤖 *Generating quiz questions with AI...*\n\n"
+            "Please wait, this may take 10-15 seconds...",
+            parse_mode="Markdown",
+            reply_markup=ReplyKeyboardRemove()
+        )
+        
+        # Generate questions via Gemini
+        ai_questions = generate_bulk_questions_ai(topic, count, lang, difficulty, options_cnt)
+        
+        if not ai_questions or len(ai_questions) == 0:
+            await generating_msg.edit_text(
+                "❌ Failed to generate questions. Please try again.",
+                parse_mode="Markdown"
+            )
+            return NEGATIVE
+        
+        # ✅ STORE QUESTIONS IN CONTEXT (unified format)
+        formatted_questions = []
+        for q in ai_questions:
+            formatted_questions.append({
+                "text": q.get("question", ""),
+                "options": q.get("options", []),
+                "correct": q.get("options", [])[q.get("correct", 0)] if q.get("options") else "",
+                "explanation": "",  # AI doesn't provide explanations
+                "pre_message": ""
+            })
+        
+        context.user_data["ai_questions"] = formatted_questions
+        
+        # Update quiz_build with AI questions (if using manual flow)
+        if "quiz_build" not in context.user_data:
+            context.user_data["quiz_build"] = {
+                "title": context.user_data.get("title", "AI Quiz"),
+                "description": context.user_data.get("description", ""),
+                "timer": context.user_data.get("time_limit", 30),
+                "questions": formatted_questions
+            }
+        else:
+            context.user_data["quiz_build"]["questions"] = formatted_questions
+        
+        await generating_msg.delete()
+        
+        # ✅ PROCEED TO NEGATIVE MARKING
+        reply_keyboard = [['0', '0.25', '0.33', '0.50']]
+        await update.message.reply_text(
+            "➖ **Step 11 — Negative Marking**\nDeduct offset per error choice:",
+            reply_markup=ReplyKeyboardMarkup(reply_keyboard, one_time_keyboard=True, resize_keyboard=True)
+        )
+        return NEGATIVE
+        
+    except Exception as e:
+        logging.error(f"Error in handle_shuffle: {e}")
+        await update.message.reply_text("❌ Error generating questions. Please try again.")
+        return SHUFFLE
 
 # Final Summary aur Quiz Generation Confirmation
 async def handle_negative_and_finish(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
