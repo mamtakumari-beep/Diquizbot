@@ -428,11 +428,18 @@ async def handle_time_limit(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         # ✅ FORMAT QUESTIONS PROPERLY
         formatted_questions = []
         for q in ai_questions:
+            # ✅ सही तरीके से format करो
+            correct_idx = q.get("correct", 0)
+            options = q.get("options", [])
+            
+            # Index को text में convert करो
+            correct_answer = options[correct_idx] if correct_idx < len(options) else options[0]
+            
             formatted_questions.append({
                 "text": q.get("question", ""),
-                "options": q.get("options", []),
-                "correct": q.get("options", [])[q.get("correct", 0)] if q.get("options") else "",
-                "explanation": "",
+                "options": options,
+                "correct": correct_answer,  # ✅ Text format में store करो
+                "explanation": q.get("explanation", ""),
                 "pre_message": ""
             })
         
@@ -475,6 +482,7 @@ async def handle_time_limit(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         logging.error(f"Error in handle_time_limit: {e}")
         await update.message.reply_text("❌ Error generating questions. Try again!")
         return TIME_LIMIT
+
 
 # Final Summary aur Quiz Generation Confirmation
 async def handle_negative_and_finish(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
