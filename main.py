@@ -364,49 +364,97 @@ async def handle_shuffle(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
 # Final Summary aur Quiz Generation Confirmation
 async def handle_negative_and_finish(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Handle negative marking selection and save AI-generated quiz to DB, then show summary panel"""
     try:
         query = update.callback_query
         await query.answer()
         
         neg_val = float(query.data.replace("neg_", "").strip())
-        quiz = context.user_data.get("quiz_build", {})
-        user_id = context.user_data.get("quiz_build_creator_id")
         
-        if not quiz or not quiz.get("title"):
-            await query.message.reply_text("❌ Error: Quiz data missing. Start over with /newquiz")
+        # Get quiz data from context (either manual /newquiz OR AI /autoquiz)
+        quiz_build = context.user_data.get("quiz_build")
+        if not quiz_build:
+            # For /autoquiz, check if we have AI-generated questions in context
+            quiz_build = {
+                "title": context.user_data.get("title", "AI Quiz"),
+                "description": context.user_data.get("description", "AI Generated Quiz"),
+                "timer": context.user_data.get("time_limit", 30),
+                "questions": context.user_data.get("ai_questions", [])  # 👈 AI questions
+            }
+        
+        user_id = context.user_data.get("quiz_build_creator_id") or update.callback_query.from_user.id
+        
+        if not quiz_build or not quiz_build.get("title"):
+            await query.message.reply_text("❌ Error: Quiz data missing. Start over with /newquiz or /autoquiz")
             return ConversationHandler.END
 
-        conn = sqlite3.connect(DB_FILE)  # ✅ FIXED: DB_FILE instead of DB_NAME
+        # ✅ SAVE QUIZ TO DATABASE
+        conn = sqlite3.connect(DB_FILE)
         cursor = conn.cursor()
-        # negative_value column ke sath data insert kiya
+        
+        # Insert into quizzes table with negative_value
         cursor.execute(
             "INSERT INTO quizzes (creator_id, title, description, timer, negative_value) VALUES (?, ?, ?, ?, ?)", 
-            (user_id, quiz["title"], quiz["description"], quiz["timer"], neg_val)
+            (user_id, quiz_build["title"], quiz_build["description"], quiz_build.get("timer", 30), neg_val)
         )
-        qid = cursor.lastrowid
+        quiz_id = cursor.lastrowid
         
-        for q in quiz["questions"]:
-            cursor.execute(
-                "INSERT INTO questions (quiz_id, question_text, options, correct_answer, explanation, pre_message) VALUES (?, ?, ?, ?, ?, ?)", 
-                (qid, q["text"], json.dumps(q["options"]), q["correct"], q["explanation"], q["pre_message"])
-            )
+        # Insert AI-generated questions (or manual questions from /newquiz)
+        questions = quiz_build.get("questions", [])
+        for q in questions:
+            # Handle both formats: manual polls and AI-generated
+            if isinstance(q, dict):
+                q_text = q.get("text") or q.get("question", "")
+                options = q.get("options", [])
+                correct = q.get("correct", "")
+                explanation = q.get("explanation", "")
+                pre_message = q.get("pre_message", "")
+                
+                cursor.execute(
+                    "INSERT INTO questions (quiz_id, question_text, options, correct_answer, explanation, pre_message) VALUES (?, ?, ?, ?, ?, ?)", 
+                    (quiz_id, q_text, json.dumps(options), correct, explanation, pre_message)
+                )
+        
         conn.commit()
         conn.close()
         
+        # ✅ CLEAR TEMPORARY DATA
         context.user_data.pop("quiz_build", None)
         context.user_data.pop("quiz_build_creator_id", None)
+        # Clear /autoquiz specific keys
+        context.user_data.pop("title", None)
+        context.user_data.pop("description", None)
+        context.user_data.pop("time_limit", None)
+        context.user_data.pop("ai_questions", None)
+        context.user_data.pop("topic", None)
+        context.user_data.pop("q_count", None)
+        context.user_data.pop("language", None)
+        context.user_data.pop("difficulty", None)
+        context.user_data.pop("options_count", None)
+        context.user_data.pop("shuffle", None)
+        context.user_data.pop("explanation", None)
         
-        await query.message.edit_reply_markup(reply_markup=None)
+        # Remove callback buttons from the negative marking message
+        try:
+            await query.edit_message_reply_markup(reply_markup=None)
+        except Exception:
+            pass
         
+        # Show success message
         neg_display = "Disabled" if neg_val == 0.0 else f"-{neg_val} per wrong answer"
-        await query.message.reply_text(f"✅ Quiz Created Successfully!\n⏱ Timer: {quiz['timer']}s\n📉 Negative Marking: {neg_display}")
+        await query.message.reply_text(
+            f"✅ Quiz Created Successfully!\n⏱ Timer: {quiz_build.get('timer', 30)}s\n📉 Negative Marking: {neg_display}"
+        )
         
-        await show_summary_panel_text(query, context, qid)
+        # ✅ SHOW SUMMARY PANEL (same as /newquiz flow)
+        await show_summary_panel_text(query, context, quiz_id)
+        
         return ConversationHandler.END
+        
     except Exception as e:
-        logging.error(f"Error in handle_negative_selection: {e}")
+        logging.error(f"Error in handle_negative_and_finish: {e}", exc_info=True)
         return ConversationHandler.END
-
+        
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     await update.message.reply_text("❌ Quiz setup processing setup abandoned.", reply_markup=ReplyKeyboardRemove())
     return ConversationHandler.END
