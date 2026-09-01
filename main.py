@@ -3931,8 +3931,7 @@ async def main():
                 DIFFICULTY: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_difficulty)],
                 OPTIONS_COUNT: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_options_count)],
                 TIME_LIMIT: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_time_limit)],
-                SHUFFLE: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_shuffle)],
-                NEGATIVE: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_negative_and_finish)],
+                NEGATIVE: [CallbackQueryHandler(handle_negative_and_finish, pattern="^neg_")],  # ✅ Callback handler
             },
             fallbacks=[CommandHandler("cancel", cancel)],
         )
