@@ -358,69 +358,82 @@ async def handle_shuffle(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     try:
         context.user_data['shuffle'] = update.message.text
         
-        # ✅ GENERATE AI QUESTIONS HERE (before negative marking)
+        # ✅ AI QUESTIONS GENERATE KARO
         topic = context.user_data.get('topic', 'General Knowledge')
         count = context.user_data.get('q_count', 5)
         lang = context.user_data.get('language', 'English')
         difficulty = context.user_data.get('difficulty', 'Medium')
         options_cnt = context.user_data.get('options_count', 4)
         
-        # Show generating message
+        # Generating message dikha
         generating_msg = await update.message.reply_text(
-            "🤖 *Generating quiz questions with AI...*\n\n"
-            "Please wait, this may take 10-15 seconds...",
+            "🤖 *AI Quiz Generate Ho Raha Hai...*\n\n"
+            "⏳ Please wait, 10-15 seconds...",
             parse_mode="Markdown",
             reply_markup=ReplyKeyboardRemove()
         )
         
-        # Generate questions via Gemini
+        # AI se questions generate karo
         ai_questions = generate_bulk_questions_ai(topic, count, lang, difficulty, options_cnt)
         
         if not ai_questions or len(ai_questions) == 0:
             await generating_msg.edit_text(
-                "❌ Failed to generate questions. Please try again.",
+                "❌ AI Questions generate nahi ho paye. Try again!",
                 parse_mode="Markdown"
             )
-            return NEGATIVE
+            return SHUFFLE
         
-        # ✅ STORE QUESTIONS IN CONTEXT (unified format)
+        # ✅ FORMAT QUESTIONS PROPERLY
         formatted_questions = []
         for q in ai_questions:
             formatted_questions.append({
                 "text": q.get("question", ""),
                 "options": q.get("options", []),
                 "correct": q.get("options", [])[q.get("correct", 0)] if q.get("options") else "",
-                "explanation": "",  # AI doesn't provide explanations
+                "explanation": "",
                 "pre_message": ""
             })
         
+        # ✅ CONTEXT MEIN STORE KARO
         context.user_data["ai_questions"] = formatted_questions
-        
-        # Update quiz_build with AI questions (if using manual flow)
-        if "quiz_build" not in context.user_data:
-            context.user_data["quiz_build"] = {
-                "title": context.user_data.get("title", "AI Quiz"),
-                "description": context.user_data.get("description", ""),
-                "timer": context.user_data.get("time_limit", 30),
-                "questions": formatted_questions
-            }
-        else:
-            context.user_data["quiz_build"]["questions"] = formatted_questions
+        context.user_data["quiz_build"] = {
+            "title": context.user_data.get("title", "AI Quiz"),
+            "description": context.user_data.get("description", ""),
+            "timer": context.user_data.get("time_limit", 30),
+            "questions": formatted_questions
+        }
+        context.user_data["quiz_build_creator_id"] = update.message.from_user.id
         
         await generating_msg.delete()
         
-        # ✅ PROCEED TO NEGATIVE MARKING
-        reply_keyboard = [['0', '0.25', '0.33', '0.50']]
+        # ✅ NEGATIVE MARKING BUTTONS DIKHA
+        neg_keyboard = InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton("❌ No Negative (0.0)", callback_data="neg_0.0"),
+                InlineKeyboardButton("📉 1/4th (-0.25)", callback_data="neg_0.25")
+            ],
+            [
+                InlineKeyboardButton("📉 Half (-0.5)", callback_data="neg_0.5"),
+                InlineKeyboardButton("📉 Single (-1.0)", callback_data="neg_1.0")
+            ],
+            [
+                InlineKeyboardButton("📉 Heavy (-1.5)", callback_data="neg_1.5")
+            ]
+        ])
+        
         await update.message.reply_text(
-            "➖ **Step 11 — Negative Marking**\nDeduct offset per error choice:",
-            reply_markup=ReplyKeyboardMarkup(reply_keyboard, one_time_keyboard=True, resize_keyboard=True)
+            "🛑 **Select Negative Marking Schema:**\n\n"
+            "Aap is quiz ke liye kitni negative marking set karna chahte hain?",
+            reply_markup=neg_keyboard,
+            parse_mode="Markdown"
         )
         return NEGATIVE
         
     except Exception as e:
         logging.error(f"Error in handle_shuffle: {e}")
-        await update.message.reply_text("❌ Error generating questions. Please try again.")
+        await update.message.reply_text("❌ Error generating questions. Try again!")
         return SHUFFLE
+
 
 # Final Summary aur Quiz Generation Confirmation
 async def handle_negative_and_finish(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
