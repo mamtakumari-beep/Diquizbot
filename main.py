@@ -3776,17 +3776,14 @@ async def main():
         return
     
     try:
-        # 🌟 FIX: Database ko yahan initialize kiya taaki tables automatically ban jayein
         init_db()  
         
-        # 🔥 GLOBAL TIMEOUT FIX: Saare parameters ko request_config ke andar hi handle kiya hai
         request_config = HTTPXRequest(
-            connect_timeout=35.0,  # Max connection hold time
-            read_timeout=45.0,     # Max wait time for incoming operations
-            write_timeout=35.0     # Max delivery buffer time
+            connect_timeout=35.0,
+            read_timeout=45.0,
+            write_timeout=35.0
         )
         
-        # ✅ SYNTAX & CONFIG FIXED: Builder se dot(.) wale extra timeouts hata diye hain
         app = (
             Application.builder()
             .token(BOT_TOKEN)
@@ -3794,7 +3791,7 @@ async def main():
             .build()
         )
         
-        # 🔁 COMPREHENSIVE DUAL CONVERSATION ROUTER MAPS (Creation + Live Editing)
+        # 🔁 CONVERSATION HANDLERS
         new_quiz_handler = ConversationHandler(
             entry_points=[
                 CommandHandler("newquiz", new_quiz_start),
@@ -3804,23 +3801,16 @@ async def main():
                 TITLE: [MessageHandler(filters.TEXT & ~filters.COMMAND, receive_title)],
                 DESCRIPTION: [MessageHandler(filters.TEXT & ~filters.COMMAND, receive_desc), CommandHandler("skip", receive_desc)],
                 QUESTIONS: [CommandHandler("undo", handle_undo), CommandHandler("done", finish_quiz_creation), MessageHandler(filters.POLL, receive_poll)],
-                
-                # 🟢 PRE_MESSAGE state config for 2x /undo sequence mapping 
                 PRE_MESSAGE: [
-                    CommandHandler("undo", handle_undo),  # 👈 /undo handler commands structural lookup priority mapping
+                    CommandHandler("undo", handle_undo),
                     CommandHandler("skip", receive_pre_message),
                     MessageHandler(filters.POLL, receive_pre_message),
-                    # 👈 Commands are filtered out so /undo doesn't transform into text stream payload
                     MessageHandler((filters.TEXT | filters.PHOTO | filters.VIDEO | filters.Document.ALL | filters.ANIMATION) & ~filters.COMMAND, receive_pre_message)
                 ],
-                
-                # 🟢 TIMER state me CallbackQueryHandler add kiya button input ke liye
                 TIMER: [
                     MessageHandler(filters.TEXT & ~filters.COMMAND, handle_timer_text),
-                    CallbackQueryHandler(handle_timer_text, pattern="^timer_")  # 👈 Buttons capture karne ke liye yeh line jodi hai
+                    CallbackQueryHandler(handle_timer_text, pattern="^timer_")
                 ],
-                
-                # 🔥 NEW NEGATIVE MARKING STATE INTEGRATED (CREATION FLOW):
                 NEGATIVE: [
                     CallbackQueryHandler(handle_negative_selection, pattern="^neg_")
                 ]
@@ -3828,13 +3818,12 @@ async def main():
             fallbacks=[CommandHandler("cancel", cancel)],
         )
 
-        # 🔥 UPDATED EDIT FLOW CONVERSATION HANDLER
         quiz_edit_flow_handler = ConversationHandler(
             entry_points=[
                 CallbackQueryHandler(edit_title_trigger, pattern="^edtitle_"),
                 CallbackQueryHandler(edit_desc_trigger, pattern="^eddesc_"),
                 CallbackQueryHandler(edit_timer_trigger, pattern="^edtime_"),
-                CallbackQueryHandler(edit_negative_trigger, pattern="^edneg_"), # 👈 Nayi trigger line register ki hai
+                CallbackQueryHandler(edit_negative_trigger, pattern="^edneg_"),
                 CallbackQueryHandler(edit_pre_message_trigger, pattern="^editpre_"),
                 CallbackQueryHandler(edit_explanation_trigger, pattern="^editexpl_")
             ],
@@ -3842,7 +3831,6 @@ async def main():
                 EDIT_TITLE: [MessageHandler(filters.TEXT & ~filters.COMMAND, save_edited_title)],
                 EDIT_DESC: [MessageHandler(filters.TEXT & ~filters.COMMAND, save_edited_desc)],
                 EDIT_TIMER: [MessageHandler(filters.TEXT & ~filters.COMMAND, save_edited_timer)],
-                # 🔥 NEW RESPONSE STATE FOR EDIT FLOW:
                 EDIT_NEGATIVE: [CallbackQueryHandler(save_edited_negative, pattern="^updeneg_")],
                 EDIT_QUESTION_PRE_MESSAGE: [MessageHandler(filters.TEXT, save_pre_message)],
                 EDIT_QUESTION_EXPLANATION: [MessageHandler(filters.TEXT, save_explanation)]
@@ -3850,30 +3838,25 @@ async def main():
             fallbacks=[CommandHandler("cancel", cancel)]
         )
 
-    conv_handler = ConversationHandler(
-        entry_points=[CommandHandler("autoquiz", autoquiz_start)],
-        states={
-            TOPIC: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_topic)],
-            Q_COUNT: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_q_count)],
-            TITLE: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_title)],
-            DESCRIPTION: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_description)],
-            LANGUAGE: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_language)],
-            EXPLANATION: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_explanation)],
-            DIFFICULTY: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_difficulty)],
-            OPTIONS_COUNT: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_options_count)],
-            TIME_LIMIT: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_time_limit)],
-            SHUFFLE: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_shuffle)],
-            NEGATIVE: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_negative_and_finish)],
-        },
-        fallbacks=[CommandHandler("cancel", cancel)],
-    )
+        conv_handler = ConversationHandler(
+            entry_points=[CommandHandler("autoquiz", autoquiz_start)],
+            states={
+                TOPIC: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_topic)],
+                Q_COUNT: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_q_count)],
+                TITLE: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_title)],
+                DESCRIPTION: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_description)],
+                LANGUAGE: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_language)],
+                EXPLANATION: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_explanation)],
+                DIFFICULTY: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_difficulty)],
+                OPTIONS_COUNT: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_options_count)],
+                TIME_LIMIT: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_time_limit)],
+                SHUFFLE: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_shuffle)],
+                NEGATIVE: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_negative_and_finish)],
+            },
+            fallbacks=[CommandHandler("cancel", cancel)],
+        )
 
-    application.add_handler(CommandHandler("start", start))
-    application.add_handler(conv_handler)
-
-
-        
-        # Registering core structures hooks
+        # ✅ FIXED: Use 'app' instead of 'application'
         app.add_handler(CommandHandler("start", start))
         app.add_handler(CommandHandler("help", help_command))
         app.add_handler(CommandHandler("quizzes", quizzes_command))
@@ -3882,6 +3865,7 @@ async def main():
         
         app.add_handler(new_quiz_handler)
         app.add_handler(quiz_edit_flow_handler)
+        app.add_handler(conv_handler)
 
         # Core system triggers binding maps
         app.add_handler(CallbackQueryHandler(view_my_quizzes, pattern="^btn_viewquizzes$"))
@@ -3902,7 +3886,6 @@ async def main():
         app.add_handler(CallbackQueryHandler(execute_broadcast_callback, pattern="^bcast_"))
         app.add_handler(CommandHandler("send", send_to_support_group))
         
-        # 🔴 Quiz pause/resume handlers
         app.add_handler(CallbackQueryHandler(handle_pause_quiz, pattern="^pausequiz_"))
         app.add_handler(CallbackQueryHandler(handle_stop_quiz_from_pause, pattern="^stopquiz_"))
         app.add_handler(CommandHandler("autorun", autorun_command))
@@ -3911,20 +3894,16 @@ async def main():
         app.add_handler(PollAnswerHandler(track_poll_answers))
         app.add_handler(InlineQueryHandler(inline_query_handler))
         
-        
         # 🚀 BOT RUN/POLLING INITIALIZATION
         logging.info("Starting Quiz Bot polling...")
         await app.initialize()
         await app.start()
         await app.updater.start_polling(allowed_updates=Update.ALL_TYPES)
-        # Load persisted autoruns and schedule them
         await load_autoruns_on_startup(app)
-        # Bot ko running state me rakhne ke liye infinite event wait loop
         await asyncio.Event().wait()
 
     except Exception as e:
         logging.error(f"Critical error in main loop: {e}")
-        
         
 # 🛑 EXECUTION LOOPS CLOSURE:
 if __name__ == '__main__':
